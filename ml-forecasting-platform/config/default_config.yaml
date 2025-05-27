@@ -1,0 +1,80 @@
+project_name: "energy_demand_forecasting"
+
+data:
+  source_type: "local"  # local, s3, azure_blob, gcs
+  source_path: "data/sample_energy_data.csv"
+  target_column: "demand"
+  time_column: "timestamp"
+  feature_columns: ["temperature", "humidity", "day_of_week", "hour"]
+  preprocessing:
+    scale_features: true
+    handle_missing: "interpolate"
+    feature_lag_windows: [1, 7, 24]  # hours
+    seasonal_decomposition: true
+
+models:
+  - name: "lstm_baseline"
+    algorithm: "lstm"
+    hyperparameters:
+      sequence_length: 48  # 48 hours lookback
+      hidden_size: 64
+      num_layers: 2
+      dropout: 0.2
+      learning_rate: 0.001
+    training_params:
+      epochs: 100
+      batch_size: 32
+      validation_split: 0.2
+      early_stopping_patience: 10
+
+  - name: "xgboost_ensemble"
+    algorithm: "xgboost"
+    hyperparameters:
+      n_estimators: 1000
+      max_depth: 6
+      learning_rate: 0.1
+      subsample: 0.8
+      colsample_bytree: 0.8
+      reg_alpha: 0.1
+      reg_lambda: 1.0
+    training_params:
+      early_stopping_rounds: 50
+      eval_metric: "rmse"
+      
+  - name: "prophet_seasonal"
+    algorithm: "prophet"
+    hyperparameters:
+      seasonality_mode: "multiplicative"
+      yearly_seasonality: true
+      weekly_seasonality: true
+      daily_seasonality: true
+      holidays_prior_scale: 10.0
+      changepoint_prior_scale: 0.05
+    training_params:
+      mcmc_samples: 0  # Use MAP estimation for speed
+
+  - name: "random_forest"
+    algorithm: "random_forest"
+    hyperparameters:
+      n_estimators: 200
+      max_depth: 10
+      min_samples_split: 5
+      min_samples_leaf: 2
+      random_state: 42
+    training_params:
+      n_jobs: -1
+
+deployment:
+  platform: "local"  # local, aws, azure, gcp
+  compute_type: "cpu"  # cpu, gpu
+  scaling:
+    min_instances: 1
+    max_instances: 5
+    target_cpu_utilization: 70
+
+experiment_tracking:
+  backend: "mlflow"  # mlflow, wandb, azure_ml
+  experiment_name: "energy_forecasting_experiment"
+  tracking_uri: "sqlite:///mlruns.db"
+  log_metrics: ["mse", "mae", "mape", "rmse"]
+  log_artifacts: ["model", "plots", "predictions"]
